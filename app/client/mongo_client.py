@@ -82,7 +82,6 @@ class MongoDBClient:
 
     def get_prompt_template(self, prompt_id: str, collection_name: str = "prompt") -> Optional[Dict[str, Any]]:
         try:
-            print('Getting prompt template from MongoDB************')
             return self.db[collection_name].find_one({"_id": ObjectId(prompt_id)})
         except errors.PyMongoError as e:
             print(f"Error getting prompt template from '{collection_name}': {e}")

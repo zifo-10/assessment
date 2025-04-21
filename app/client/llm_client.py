@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 
-from app.model.llm_dto import PromptTemplate, GeneratedDetails, AssessmentQuiz
+from app.model.llm_response import PromptTemplate, GeneratedDetails, AssessmentQuiz, ScenarioQuestion
 
 
 class OpenAIClient:
@@ -48,6 +48,25 @@ class OpenAIClient:
                 ],
                 temperature=0,
                 response_format=AssessmentQuiz
+            )
+            return response.choices[0].message.parsed
+        except Exception as e:
+            raise e
+
+    def generate_scenario_based(self, course_level: PromptTemplate) -> ScenarioQuestion:
+        try:
+            response = self.client.beta.chat.completions.parse(
+                model=self.model,
+                messages=[ChatCompletionSystemMessageParam(
+                    role="system",
+                    content=course_level.system),
+                    ChatCompletionUserMessageParam(
+                        role="user",
+                        content=course_level.user
+                    )
+                ],
+                temperature=0,
+                response_format=ScenarioQuestion
             )
             return response.choices[0].message.parsed
         except Exception as e:

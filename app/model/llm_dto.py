@@ -1,24 +1,19 @@
-from typing import List
-
 from pydantic import BaseModel, Field
+from typing import List, Optional
+from pyobjectID import PyObjectId
 
 
-class PromptTemplate(BaseModel):
-    system: str
-    user: str
+class AnswerOption(BaseModel):
+    option_text: str
+    explanation: str
+    is_correct: bool
+    option_id: PyObjectId
 
-class GeneratedDetails(BaseModel):
-    learning_objectives: List[str] = Field(..., title="Learning Objectives")
-    skills: List[str] = Field(..., title="Skills")
-    key_responsibilities: List[str] = Field(..., title="Key Responsibilities")
-
-
-
-class QuizQuestion(BaseModel):
-    question: str = Field(..., description="The text of the quiz question")
-    choices: List[str] = Field(..., description="A list of four answer choices")
-    correct_answer: str = Field(..., description="The correct answer text, must match one of the choices")
-    explanation: str = Field(..., description="Explanation for the correct answer")
-
-class AssessmentQuiz(BaseModel):
-    questions: List[QuizQuestion] = Field(..., description="List of generated quiz questions")
+class ScenarioQuestion(BaseModel):
+    level: int
+    scenario_description: str
+    question_text: str
+    options: List[AnswerOption]
+    parent_option_id: Optional[str] = Field(None, description="ID of the parent option")
+    parent_question_id: Optional[str] = Field(None, description="ID of the parent question")
+    depth: int = Field(0, description="Depth in the scenario tree")
