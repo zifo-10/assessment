@@ -2,7 +2,6 @@ import os
 from typing import Optional
 
 from openai import OpenAI
-from concurrent.futures import ThreadPoolExecutor
 
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 

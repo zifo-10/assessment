@@ -15,5 +15,5 @@ class ScenarioQuestion(BaseModel):
     question_text: str
     options: List[AnswerOption]
     parent_option_id: Optional[str] = Field(None, description="ID of the parent option")
-    parent_question_id: Optional[str] = Field(None, description="ID of the parent question")
+    quiz_id: Optional[str] = Field(None, description="ID of the parent question")
     depth: int = Field(0, description="Depth in the scenario tree")
