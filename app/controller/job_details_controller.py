@@ -109,6 +109,7 @@ class JobDetailsController:
 
         first_scenario_data = first_scenario.model_dump()
         first_scenario_data["options"] = options_with_ids
+        first_scenario_data["question_type"] = "scenario_base"
 
         # Update assessment with root scenario
         assessment_doc = self.mongo_client.find_one("assessment", {"_id": ObjectId(assessment_id)})

@@ -7,7 +7,7 @@ import os
 mongo_uri = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
 db_name = os.getenv('DB_NAME', 'assessment')
 collection_name = os.getenv('COLLECTION_NAME', 'job')
-mongo_client = MongoDBClient(mongo_uri, db_name, collection_name)
+mongo_client = MongoDBClient(mongo_uri, db_name)
 
 
 def process_training_data(file_path):
@@ -94,7 +94,7 @@ for job in training_data:
     i += 1
     try:
         # Insert each job into MongoDB
-        insert = mongo_client.insert_one(JobDTO(**job).model_dump())
+        insert = mongo_client.insert_one('job', JobDTO(**job).model_dump())
         print('inserted', insert)
     except Exception as e:
         print(e)

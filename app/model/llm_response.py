@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import List, Optional
 from uuid import uuid4
 from pydantic import BaseModel, Field
@@ -14,11 +15,17 @@ class GeneratedDetails(BaseModel):
     key_responsibilities: List[str] = Field(..., title="Key Responsibilities")
 
 
+class QuestionType(str, Enum):
+    MULTIPLE_CHOICE = "multiple_choice"
+    TRUE_FALSE = "true_false"
+
+
 class QuizQuestion(BaseModel):
     question: str = Field(..., description="The text of the quiz question")
-    choices: List[str] = Field(..., description="A list of four answer choices")
+    options: List[str] = Field(..., description="A list of four answer choices")
     correct_answer: str = Field(..., description="The correct answer text, must match one of the choices")
     explanation: str = Field(..., description="Explanation for the correct answer")
+    question_type: QuestionType = Field(..., description="The type of the question")
 
 
 class AssessmentQuiz(BaseModel):
@@ -29,6 +36,7 @@ class AnswerOption(BaseModel):
     option_text: str
     explanation: str
     is_correct: bool
+
 
 class ScenarioQuestion(BaseModel):
     scenario_description: str
