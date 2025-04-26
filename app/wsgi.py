@@ -49,12 +49,14 @@ async def list_jobs(limit: int = Query(10, ge=1), skip: int = Query(0, ge=0)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/job_id/{job_id}")
-async def get_assessment(job_id: str):
+@app.get("/job_id/{job_id}/{level}")
+async def get_assessment(job_id: str,
+                        level: int):
     try:
         quiz = mongo_client.find_one(
             assessment_collection,
-            {"job_id": job_id}
+            {"job_id": job_id,
+                "level": level}
         )
         if not quiz:
             raise HTTPException(status_code=404, detail="Quiz not found")
@@ -92,7 +94,6 @@ async def get_assessment_with_scenario(item_id: str):
         for i in options:
             i["option_id"] = str(i["option_id"])
             options_id_list.append(i)
-        print('asdfasdfsafsf', options_id_list[0])
         scenario_q["options"] = options_id_list
 
         return scenario_q
