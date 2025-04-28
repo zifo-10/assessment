@@ -25,7 +25,7 @@ app.add_middleware(
 
 mongo_uri = os.getenv('MONGO_URI')
 db_name = os.getenv('DB_NAME', 'assessment')
-job_collection = os.getenv('COLLECTION_NAME', 'job')
+job_collection = os.getenv('COLLECTION_NAME', 'new_job')
 assessment_collection = 'assessment'
 scenario_collection = 'scenario'
 
@@ -45,7 +45,6 @@ async def list_jobs(limit: int = Query(10, ge=1), skip: int = Query(0, ge=0)):
         )
 
         for job in jobs:
-            print(job)
             job_list.append(GetJobDTO(**job))
 
         return job_list
