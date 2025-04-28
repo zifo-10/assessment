@@ -2,6 +2,7 @@ import os
 from typing import List
 
 from bson import ObjectId
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,6 +12,9 @@ from app.model.job_dto import GetJobDTO
 
 app = FastAPI()
 
+
+load_dotenv()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,7 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-mongo_uri = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+mongo_uri = os.getenv('MONGO_URI')
 db_name = os.getenv('DB_NAME', 'assessment')
 job_collection = os.getenv('COLLECTION_NAME', 'job')
 assessment_collection = 'assessment'
