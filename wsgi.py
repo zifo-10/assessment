@@ -1,5 +1,6 @@
 import os
 from typing import List
+from fastapi.responses import JSONResponse
 
 from pyobjectID import PyObjectId
 from dotenv import load_dotenv
@@ -31,6 +32,9 @@ scenario_collection = 'scenario'
 
 mongo_client = MongoDBClient(mongo_uri, db_name)
 
+@app.get("/healthcheck")
+def healthcheck():
+    return JSONResponse(status_code=200, content={"message": "healthy"})
 
 @app.get("/job", response_model=List[GetJobDTO])
 async def list_jobs(limit: int = Query(10, ge=1), skip: int = Query(0, ge=0)):
