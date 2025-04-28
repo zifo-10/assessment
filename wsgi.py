@@ -1,7 +1,7 @@
 import os
 from typing import List
 
-from bson import ObjectId
+from pyobjectID import PyObjectId
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -72,15 +72,10 @@ async def get_assessment(job_id: str,
 
 
 @app.get("/assessment/{item_id}")
-async def get_assessment_with_scenario(item_id: str):
+async def get_assessment_with_scenario(item_id: PyObjectId):
     # Step 1: Convert the item_id to ObjectId
-    try:
-        obj_id = ObjectId(item_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid ID format")
-
     # Step 2: Get the assessment document
-    assessment_pipeline = [{"$match": {"_id": obj_id}}]
+    assessment_pipeline = [{"$match": {"_id": item_id}}]
     assessment_docs = mongo_client.aggregate(assessment_collection, assessment_pipeline)
 
     if not assessment_docs:
@@ -106,16 +101,11 @@ async def get_assessment_with_scenario(item_id: str):
 
 
 @app.get("/scenario-base-q/{item_id}")
-async def get_scenario_base_question(item_id: str):
-    try:
-        obj_id = ObjectId(item_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid ID format")
-
+async def get_scenario_base_question(item_id: PyObjectId):
     try:
         scenario_base = mongo_client.find_one(
             scenario_collection,
-            {"parent_option_id": obj_id}
+            {"parent_option_id": item_id}
         )
 
         if not scenario_base:
