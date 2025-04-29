@@ -1,17 +1,17 @@
 import os
+import random
 from typing import List
 
-from fastapi.responses import JSONResponse
 from bson import ObjectId
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import random
-from app.client.mongo_client import MongoDBClient
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-app = FastAPI()
+from app.client.mongo_client import MongoDBClient
 
+app = FastAPI()
 
 load_dotenv()
 
@@ -35,9 +35,11 @@ class Assessment(BaseModel):
     selected_answer: str
     time: int
 
+
 @app.get("/healthcheck")
 def healthcheck():
     return JSONResponse(status_code=200, content={"message": "healthy"})
+
 
 def get_levels(difficulty):
     levels = {
@@ -88,11 +90,15 @@ async def get_job(job_code: int, user_id: str):
             job_collection,
             query={"job_code": job_code}
         )
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
 
         user = mongo_client.find_one(
             collection_name='users',
             query={"_id": ObjectId(user_id)}
         )
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
 
         finished_training_ids = [str(tid) for tid in user.get('finished_training', [])]
 
@@ -102,6 +108,8 @@ async def get_job(job_code: int, user_id: str):
             query={"job_id": ObjectId(job['_id'])},
             sort=[("training_name", -1)]  # adjust this field as needed
         ))
+        if not get_train:
+            raise HTTPException(status_code=404, detail="No training founded for this Job")
 
         training_list = []
         next_opened = False
@@ -134,10 +142,10 @@ async def get_job(job_code: int, user_id: str):
         return {
             "training": training_list
         }
-
+    except HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @app.get("/training_details/{training_id}")
@@ -149,8 +157,11 @@ def get_training_details(training_id: str):
                 "_id": ObjectId(training_id)
             }
         )
+        if not train:
+            raise HTTPException(status_code=404, detail="Training not found")
+
         question_number = len(train['question'])
-        min = question_number
+
         training_details = {
             "train_name": train['training_name'],
             "train_description_ar": "",
@@ -159,9 +170,10 @@ def get_training_details(training_id: str):
             "time": 15
         }
         return training_details
+    except HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @app.get("/get_pre_assessment/{training_id}")
@@ -173,6 +185,8 @@ def get_training_details(training_id: str):
                 "_id": ObjectId(training_id)
             }
         )
+        if not train:
+            raise HTTPException(status_code=404, detail="Training not found")
 
         questions_ids = train['question']
 
@@ -188,54 +202,67 @@ def get_training_details(training_id: str):
                     '_id': ObjectId(question_id)
                 }
             )
+            if not question:
+                raise HTTPException(status_code=404, detail="Question not found")
             question['_id'] = str(question['_id'])
             question_list.append(question)
         return {
             "assessment": question_list
         }
+    except HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/submit_pre_assessment/{user_id}/{training_id}")
 def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Assessment]):
-    time_taken = 0
-    right_answers = 0
-    behavior_right = 0
-    situational_right = 0
-    cognitive_right = 0
+    try:
+        time_taken = 0
+        right_answers = 0
+        behavior_right = 0
+        situational_right = 0
+        cognitive_right = 0
 
-    for submitted_question in assessment:
-        time_taken += submitted_question.time
-        original_question = mongo_client.find_one(
-            collection_name='question',
-            query={'_id': ObjectId(submitted_question.question_id)}
+        for submitted_question in assessment:
+            time_taken += submitted_question.time
+            original_question = mongo_client.find_one(
+                collection_name='question',
+                query={'_id': ObjectId(submitted_question.question_id)}
+            )
+            if not original_question:
+                raise HTTPException(status_code=404, detail="Question not found")
+            if original_question['correct_answer'] == submitted_question.selected_answer:
+                right_answers += 1
+                if original_question['question_category'] == 'cognitive':
+                    cognitive_right += 1
+                elif original_question['question_category'] == 'situational':
+                    situational_right += 1
+                elif original_question['question_category'] == 'behavior':
+                    behavior_right += 1
+
+        user_results = {
+            "training_id": training_id,
+            "right_answers": right_answers,
+            "behavior_right": behavior_right,
+            "situational_right": situational_right,
+            "cognitive_right": cognitive_right,
+            "time_taken": time_taken
+        }
+        user = mongo_client.find_one(
+            collection_name='users',
+            query={'_id': ObjectId(user_id)}
         )
-        if original_question['correct_answer'] == submitted_question.selected_answer:
-            right_answers += 1
-            if original_question['question_category'] == 'cognitive':
-                cognitive_right += 1
-            elif original_question['question_category'] == 'situational':
-                situational_right += 1
-            elif original_question['question_category'] == 'behavior':
-                behavior_right += 1
-
-    user_results = {
-        "training_id": training_id,
-        "right_answers": right_answers,
-        "behavior_right": behavior_right,
-        "situational_right": situational_right,
-        "cognitive_right": cognitive_right,
-        "time_taken": time_taken
-    }
-    user = mongo_client.find_one(
-        collection_name='users',
-        query={'_id': ObjectId(user_id)}
-    )
-    user["finished_training"].append(training_id)
-    mongo_client.update_one(
-        collection_name='users',
-        query={'_id': ObjectId(user_id)},
-        update={"finished_training": user["finished_training"],}
-    )
-    return user_results
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user["finished_training"].append(training_id)
+        mongo_client.update_one(
+            collection_name='users',
+            query={'_id': ObjectId(user_id)},
+            update={"finished_training": user["finished_training"], }
+        )
+        return user_results
+    except HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
