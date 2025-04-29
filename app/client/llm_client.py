@@ -5,7 +5,8 @@ from openai import OpenAI
 
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 
-from app.model.llm_response import PromptTemplate, GeneratedDetails, AssessmentQuiz, ScenarioQuestion
+from app.constant import user_analyses_prompt
+from app.model.llm_response import PromptTemplate, GeneratedDetails, AssessmentQuiz, ScenarioQuestion, AnalysisResult
 
 
 class OpenAIClient:
@@ -70,4 +71,24 @@ class OpenAIClient:
             return response.choices[0].message.parsed
         except Exception as e:
             raise e
+
+    def analyses_user(self, user_answers: list):
+        try:
+            response = self.client.beta.chat.completions.parse(
+                model=self.model,
+                messages=[ChatCompletionSystemMessageParam(
+                    role="system",
+                    content=user_analyses_prompt),
+                    ChatCompletionUserMessageParam(
+                        role="user",
+                        content=str(user_answers)
+                    )
+                ],
+                temperature=0,
+                response_format=AnalysisResult
+            )
+            return response.choices[0].message.parsed.feedback
+        except Exception as e:
+            raise e
+
 
