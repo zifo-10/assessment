@@ -189,7 +189,7 @@ def get_training_details(training_id: str):
             "train_description_ar": "",
             "train_description_en": "",
             "question_number": 15,
-            "time": 15
+            "time": 30
         }
         return training_details
     except HTTPException as e:
