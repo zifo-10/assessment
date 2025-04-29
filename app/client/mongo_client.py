@@ -34,10 +34,19 @@ class MongoDBClient:
             print(f"Error finding document in '{collection_name}': {e}")
             return None
 
-    def find(self, collection_name: str, query: Dict[str, Any], projection: Optional[Dict[str, int]] = None,
-             limit: Optional[int] = 10, skip: Optional[int] = 0) -> List[Dict[str, Any]]:
+    def find(
+            self,
+            collection_name: str,
+            query: Dict[str, Any],
+            projection: Optional[Dict[str, int]] = None,
+            limit: Optional[int] = 100,
+            skip: Optional[int] = 0,
+            sort: Optional[List[tuple]] = None
+    ) -> List[Dict[str, Any]]:
         try:
             cursor = self.db[collection_name].find(query, projection).skip(skip).limit(limit)
+            if sort:
+                cursor = cursor.sort(sort)
             return list(cursor)
         except errors.PyMongoError as e:
             print(f"Error finding documents in '{collection_name}': {e}")
