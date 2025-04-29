@@ -190,7 +190,9 @@ def get_training_details(training_id: str):
             )
             question['_id'] = str(question['_id'])
             question_list.append(question)
-        return question_list
+        return {
+            "assessment": question_list
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
