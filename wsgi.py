@@ -94,23 +94,41 @@ async def get_job(job_code: int, user_id: str):
             query={"_id": ObjectId(user_id)}
         )
 
-        finished_training_ids = set(str(tid) for tid in user.get('finished_training', []))
+        finished_training_ids = [str(tid) for tid in user.get('finished_training', [])]
 
-        get_train = mongo_client.find(
+        # Use sort key to preserve consistent order (e.g., by training_name or _id)
+        get_train = list(mongo_client.find(
             'train',
-            query={"job_id": ObjectId(job['_id'])}
-        )
+            query={"job_id": ObjectId(job['_id'])},
+            sort=[("training_name", -1)]  # adjust this field as needed
+        ))
 
         training_list = []
-        for train in get_train:
+        next_opened = False
+        last_finished_index = -1
+
+        # Find the index of the last finished training
+        for idx, train in enumerate(get_train):
+            if str(train['_id']) in finished_training_ids:
+                last_finished_index = idx
+
+        for idx, train in enumerate(get_train):
             train_id_str = str(train['_id'])
-            train['level'] = get_levels(train['level'][0]['difficulty'])
-            train['name'] = train['training_name']
+            level = get_levels(train['level'][0]['difficulty'])
+
+            # Determine status
+            if train_id_str in finished_training_ids:
+                status = True
+            elif idx == last_finished_index + 1:
+                status = True
+            else:
+                status = False
+
             training_list.append({
                 "train_name": train['training_name'],
-                "train_level": train['level'],
+                "train_level": level,
                 "training_id": train_id_str,
-                "completed": train_id_str in finished_training_ids  # True if finished
+                "status": status
             })
 
         return {
@@ -119,6 +137,7 @@ async def get_job(job_code: int, user_id: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.get("/training_details/{training_id}")
