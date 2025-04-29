@@ -29,6 +29,12 @@ job_collection = os.getenv('COLLECTION_NAME', 'new_job_with_questions')
 
 mongo_client = MongoDBClient(mongo_uri, db_name)
 
+
+class Assessment(BaseModel):
+    question_id: str
+    selected_answer: str
+    time: int
+
 @app.get("/healthcheck")
 def healthcheck():
     return JSONResponse(status_code=200, content={"message": "healthy"})
@@ -95,7 +101,9 @@ async def get_job(job_code: int):
                 "train_level":train['level'],
                 "training_id": str(train['_id']),
             })
-        return training_list
+        return {
+            "training": training_list
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -114,8 +122,8 @@ def get_training_details(training_id: str):
             "train_name": train['training_name'],
             "train_description_ar": "",
             "train_description_en": "",
-            "question_number": question_number,
-            "time": min
+            "question_number": 15,
+            "time": 15
         }
         return training_details
     except Exception as e:
@@ -153,11 +161,6 @@ def get_training_details(training_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-class Assessment(BaseModel):
-    question_id: str
-    selected_answer: str
-    time: int
 
 @app.post("/submit_pre_assessment/{user_id}/{training_id}")
 def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Assessment]):
