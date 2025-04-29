@@ -80,32 +80,46 @@ async def login_user(email: str, password: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/job_trainings/{job_code}")
-async def get_job(job_code: int):
+
+@app.get("/job_trainings/{job_code}/{user_id}")
+async def get_job(job_code: int, user_id: str):
     try:
         job = mongo_client.find_one(
             job_collection,
             query={"job_code": job_code}
         )
+
+        user = mongo_client.find_one(
+            collection_name='users',
+            query={"_id": ObjectId(user_id)}
+        )
+
+        finished_training_ids = set(str(tid) for tid in user.get('finished_training', []))
+
         get_train = mongo_client.find(
             'train',
             query={"job_id": ObjectId(job['_id'])}
         )
+
         training_list = []
         for train in get_train:
+            train_id_str = str(train['_id'])
             train['level'] = get_levels(train['level'][0]['difficulty'])
-            print(train['level'])
             train['name'] = train['training_name']
             training_list.append({
                 "train_name": train['training_name'],
-                "train_level":train['level'],
-                "training_id": str(train['_id']),
+                "train_level": train['level'],
+                "training_id": train_id_str,
+                "completed": train_id_str in finished_training_ids  # True if finished
             })
+
         return {
             "training": training_list
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/training_details/{training_id}")
 def get_training_details(training_id: str):
