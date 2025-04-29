@@ -72,7 +72,7 @@ class OpenAIClient:
         except Exception as e:
             raise e
 
-    def analyses_user(self, user_answers: list, language: str):
+    def analyses_user(self, user_answers: list, language: str = 'en'):
         try:
             print(language)
             response = self.client.beta.chat.completions.parse(
