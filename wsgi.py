@@ -87,7 +87,7 @@ async def login_user(email: str, password: str):
         user['_id'] = str(user['_id'])
         return user
     except HTTPException as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -100,7 +100,7 @@ async def get_user_by_id(user_id: str):
         user['_id'] = str(user['_id'])
         return user
     except HTTPException as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -130,7 +130,7 @@ async def get_job(job_code: int, user_id: str):
             sort=[("training_name", -1)]  # adjust this field as needed
         ))
         if not get_train:
-            raise HTTPException(status_code=404, detail="No training founded for this Job")
+            raise HTTPException(status_code=404, detail="No training found")
 
         training_list = []
         next_opened = False
@@ -164,7 +164,7 @@ async def get_job(job_code: int, user_id: str):
             "training": training_list
         }
     except HTTPException as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -192,7 +192,7 @@ def get_training_details(training_id: str):
         }
         return training_details
     except HTTPException as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -231,7 +231,7 @@ def get_training_details(training_id: str):
             "assessment": question_list
         }
     except HTTPException as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -284,6 +284,6 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
         )
         return user_results
     except HTTPException as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
