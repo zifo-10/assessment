@@ -238,7 +238,7 @@ def get_training_details(training_id: str):
 
 
 @app.post("/submit_pre_assessment/{user_id}/{training_id}")
-def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "en"):
+def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "Arabic"):
     try:
         user = mongo_client.find_one("users", {"_id": ObjectId(user_id)})
         if not user:
@@ -288,7 +288,7 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
         total_questions = len(assessment)
         average_time = int(total_time / total_questions) if total_questions > 0 else 0
 
-        skill_assessments = llm_client.analyses_user(user_analyses_list)
+        skill_assessments = llm_client.analyses_user(user_analyses_list, language)
 
         question_progress = [
             {
@@ -299,15 +299,16 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
             }
             for category, counts in category_counts.items()
         ]
-
+        score_percentage = round((correct / total_questions) * 100, 2) if total_questions > 0 else 0.0
         results = {
             "correct_answers": correct,
             "incorrect_answers": total_questions - correct,
             "total_questions": total_questions,
             "average_answer_time": average_time,
+            "score_percentage": score_percentage,  # ✅ Add this line
             "course_title": training_name,
             "course_description": training_description,
-            "skill_assessments": [s.dict() for s in skill_assessments],  # ✅ FIX
+            "skill_assessments": [s.dict() for s in skill_assessments],
             "question_progress": question_progress
         }
 
@@ -318,17 +319,21 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
             query={"_id": ObjectId(user_id)},
             update={
                 "finished_training": finished_training,
+            }
+        )
+        insert_assessment = mongo_client.insert_one(
+            collection_name="assessment",
+            document={
+                "user_id": user_id,
+                "training_id": training_id,
                 "pre_assessment": results
             }
         )
-
         return results
-
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @app.get("/get_final_assessment/{training_id}")
@@ -368,3 +373,15 @@ def get_final_assessment(training_id: str):
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+# @app.post("/submit_post_assessment/{user_id}/{training_id}")
+# def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "Arabic"):
+#     try:
+#         get_assessment = mongo_client.find_one(
+#             collection_name='assessment',
+#             query={
+#                 'user_id': user_id,
+#                 'training_id': training_id
+#             }
+#         )
