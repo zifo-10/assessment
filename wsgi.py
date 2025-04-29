@@ -51,17 +51,23 @@ def get_levels(difficulty):
 
 
 @app.post("/register")
-async def register_user(email: str, password: str):
+async def register_user(email: str, password: str, name: str):
     try:
+        user_existed = mongo_client.find_one("users", {"email": email})
+        if user_existed:
+            raise HTTPException(status_code=400, detail="User with this email already exists")
         insert_user = mongo_client.insert_one(
             collection_name='users',
             document={
+                "name": name,
                 "email": email,
                 "password": password,
                 "finished_training": [],
             }
         )
         return {'user_id': str(insert_user)}
+    except HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -78,10 +84,25 @@ async def login_user(email: str, password: str):
         )
         if not user:
             raise HTTPException(status_code=401, detail="Invalid credentials")
-        return {'user_id': str(user['_id'])}
+        user['_id'] = str(user['_id'])
+        return user
+    except HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/user/{user_id}")
+async def get_user_by_id(user_id: str):
+    try:
+        user = mongo_client.find_one(collection_name='users', query={"_id": ObjectId(user_id)})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user['_id'] = str(user['_id'])
+        return user
+    except HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/job_trainings/{job_code}/{user_id}")
 async def get_job(job_code: int, user_id: str):
