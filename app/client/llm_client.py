@@ -72,16 +72,17 @@ class OpenAIClient:
         except Exception as e:
             raise e
 
-    def analyses_user(self, user_answers: list):
+    def analyses_user(self, user_answers: list, language: str):
         try:
+            print(language)
             response = self.client.beta.chat.completions.parse(
                 model=self.model,
                 messages=[ChatCompletionSystemMessageParam(
                     role="system",
-                    content=user_analyses_prompt),
+                    content=user_analyses_prompt.replace("{lang}", language)),
                     ChatCompletionUserMessageParam(
                         role="user",
-                        content=str(user_answers)
+                        content=str(user_answers) + f"\nAnswer in {language} language:"
                     )
                 ],
                 temperature=0,
