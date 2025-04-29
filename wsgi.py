@@ -1,5 +1,6 @@
 import os
 import random
+from datetime import datetime
 from typing import List
 
 from bson import ObjectId
@@ -51,6 +52,83 @@ def get_levels(difficulty):
     return levels.get(difficulty)
 
 
+def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Assessment], language: str = "Arabic"):
+    user = mongo_client.find_one("users", {"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    training = mongo_client.find_one("train", {"_id": ObjectId(training_id)})
+    if not training:
+        raise HTTPException(status_code=404, detail="Training not found")
+
+    training_name = training.get("training_name", "") if language == "en" else training.get("training_name_ar", "")
+    training_description = training.get("training_description", "") if language == "en" else training.get(
+        "training_description_ar", "")
+
+    total_time = 0
+    correct = 0
+    user_analyses_list = []
+    category_counts = {
+        "cognitive": {"correct": 0, "incorrect": 0},
+        "behavior": {"correct": 0, "incorrect": 0},
+        "situational": {"correct": 0, "incorrect": 0}
+    }
+
+    for submitted_question in assessment:
+        total_time += submitted_question.time
+        original_question = mongo_client.find_one("question", {"_id": ObjectId(submitted_question.question_id)})
+        if not original_question:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        is_correct = original_question['correct_answer'] == submitted_question.selected_answer
+        category = original_question.get("question_category", "uncategorized")
+
+        if category not in category_counts:
+            category_counts[category] = {"correct": 0, "incorrect": 0}
+
+        if is_correct:
+            correct += 1
+            category_counts[category]["correct"] += 1
+        else:
+            category_counts[category]["incorrect"] += 1
+
+        user_analyses_list.append({
+            "question": original_question['question'],
+            "user_answer": submitted_question.selected_answer,
+            "correct_answer": original_question['correct_answer'],
+            "question_category": category,
+        })
+
+    total_questions = len(assessment)
+    average_time = int(total_time / total_questions) if total_questions > 0 else 0
+
+    skill_assessments = llm_client.analyses_user(user_analyses_list, language)
+
+    question_progress = [
+        {
+            "category": category,
+            "correct": counts["correct"],
+            "incorrect": counts["incorrect"],
+            "total": counts["correct"] + counts["incorrect"]
+        }
+        for category, counts in category_counts.items()
+    ]
+    score_percentage = round((correct / total_questions) * 100, 2) if total_questions > 0 else 0.0
+    results = {
+        "submitted_at": datetime.now(),
+        "correct_answers": correct,
+        "incorrect_answers": total_questions - correct,
+        "total_questions": total_questions,
+        "average_answer_time": average_time,
+        "score_percentage": score_percentage,  # ✅ Add this line
+        "course_title": training_name,
+        "course_description": training_description,
+        "skill_assessments": [s.dict() for s in skill_assessments],
+        "question_progress": question_progress
+    }
+    return results
+
+
 @app.post("/register")
 async def register_user(email: str, password: str, name: str):
     try:
@@ -92,6 +170,7 @@ async def login_user(email: str, password: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/user/{user_id}")
 async def get_user_by_id(user_id: str):
     try:
@@ -104,6 +183,7 @@ async def get_user_by_id(user_id: str):
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/job_trainings/{job_code}/{user_id}")
 async def get_job(job_code: int, user_id: str):
@@ -189,7 +269,7 @@ def get_training_details(training_id: str):
             "train_description_ar": "",
             "train_description_en": "",
             "question_number": 15,
-            "time": 30
+            "time": 15,
         }
         return training_details
     except HTTPException as e:
@@ -240,78 +320,11 @@ def get_training_details(training_id: str):
 @app.post("/submit_pre_assessment/{user_id}/{training_id}")
 def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "Arabic"):
     try:
-        user = mongo_client.find_one("users", {"_id": ObjectId(user_id)})
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        training = mongo_client.find_one("train", {"_id": ObjectId(training_id)})
-        if not training:
-            raise HTTPException(status_code=404, detail="Training not found")
-
-        training_name = training.get("training_name", "") if language == "en" else training.get("training_name_ar", "")
-        training_description = training.get("training_description", "") if language == "en" else training.get("training_description_ar", "")
-
-        total_time = 0
-        correct = 0
-        user_analyses_list = []
-        category_counts = {
-            "cognitive": {"correct": 0, "incorrect": 0},
-            "behavior": {"correct": 0, "incorrect": 0},
-            "situational": {"correct": 0, "incorrect": 0}
-        }
-
-        for submitted_question in assessment:
-            total_time += submitted_question.time
-            original_question = mongo_client.find_one("question", {"_id": ObjectId(submitted_question.question_id)})
-            if not original_question:
-                raise HTTPException(status_code=404, detail="Question not found")
-
-            is_correct = original_question['correct_answer'] == submitted_question.selected_answer
-            category = original_question.get("question_category", "uncategorized")
-
-            if category not in category_counts:
-                category_counts[category] = {"correct": 0, "incorrect": 0}
-
-            if is_correct:
-                correct += 1
-                category_counts[category]["correct"] += 1
-            else:
-                category_counts[category]["incorrect"] += 1
-
-            user_analyses_list.append({
-                "question": original_question['question'],
-                "user_answer": submitted_question.selected_answer,
-                "correct_answer": original_question['correct_answer'],
-                "question_category": category,
-            })
-
-        total_questions = len(assessment)
-        average_time = int(total_time / total_questions) if total_questions > 0 else 0
-
-        skill_assessments = llm_client.analyses_user(user_analyses_list, language)
-
-        question_progress = [
-            {
-                "category": category,
-                "correct": counts["correct"],
-                "incorrect": counts["incorrect"],
-                "total": counts["correct"] + counts["incorrect"]
-            }
-            for category, counts in category_counts.items()
-        ]
-        score_percentage = round((correct / total_questions) * 100, 2) if total_questions > 0 else 0.0
-        results = {
-            "correct_answers": correct,
-            "incorrect_answers": total_questions - correct,
-            "total_questions": total_questions,
-            "average_answer_time": average_time,
-            "score_percentage": score_percentage,  # ✅ Add this line
-            "course_title": training_name,
-            "course_description": training_description,
-            "skill_assessments": [s.dict() for s in skill_assessments],
-            "question_progress": question_progress
-        }
-
+        user = mongo_client.find_one(
+            collection_name='users',
+            query={"_id": ObjectId(user_id)}
+        )
+        results = get_assessment_analysis(user_id, training_id, assessment, language)
         finished_training = user["finished_training"]
         finished_training.append(training_id)
         mongo_client.update_one(
@@ -321,7 +334,7 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
                 "finished_training": finished_training,
             }
         )
-        insert_assessment = mongo_client.insert_one(
+        mongo_client.insert_one(
             collection_name="assessment",
             document={
                 "user_id": user_id,
@@ -373,15 +386,24 @@ def get_final_assessment(training_id: str):
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
 
-# @app.post("/submit_post_assessment/{user_id}/{training_id}")
-# def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "Arabic"):
-#     try:
-#         get_assessment = mongo_client.find_one(
-#             collection_name='assessment',
-#             query={
-#                 'user_id': user_id,
-#                 'training_id': training_id
-#             }
-#         )
+
+@app.post("/submit_post_assessment/{user_id}/{training_id}")
+def submit_post_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "Arabic"):
+    try:
+        results = get_assessment_analysis(user_id, training_id, assessment, language)
+        mongo_client.update_one(
+            collection_name="assessment",
+            query={
+                'user_id': user_id,
+                'training_id': training_id
+            },
+            update={
+                "post_assessment": results
+            }
+        )
+        return results
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
