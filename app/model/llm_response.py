@@ -42,3 +42,11 @@ class ScenarioQuestion(BaseModel):
     scenario_description: str
     question_text: str
     options: List[AnswerOption]
+
+
+class Analysis(BaseModel):
+    tag: str = Field(..., description="Tag for the analysis")
+    analysis: str = Field(..., description="Analysis text")
+
+class AnalysisResult(BaseModel):
+    feedback: List[Analysis] = Field(..., description="List of feedback items")

@@ -213,7 +213,7 @@ def get_training_details(training_id: str):
         questions_ids = train['question']
 
         # Randomly select up to 20 question IDs
-        selected_ids = random.sample(questions_ids, min(20, len(questions_ids)))
+        selected_ids = random.sample(questions_ids, min(15, len(questions_ids)))
 
         question_list = []
 
@@ -309,11 +309,7 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
 
         # Update user’s finished training list
         finished_list = user.get("finished_training", [])
-        if training_id not in finished_list:
-            finished_list.append(training_id)
-            mongo_client.update_one("users", {"_id": ObjectId(user_id)}, {"finished_training": finished_list})
-
-        return {
+        results = {
             "correct_answers": correct,
             "incorrect_answers": total_questions - correct,
             "total_questions": total_questions,
@@ -323,8 +319,54 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
             "skill_assessments": skill_assessments,
             "question_progress": question_progress
         }
+        if training_id not in finished_list:
+            finished_list.append(training_id)
+            mongo_client.update_one("users", {"_id": ObjectId(user_id)},
+                                    {"finished_training": finished_list,
+                                             "pre_assessment": results})
+
+        return results
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/get_final_assessment/{training_id}")
+def get_final_assessment(training_id: str):
+    try:
+        train = mongo_client.find_one(
+            collection_name='train',
+            query={
+                "_id": ObjectId(training_id)
+            }
+        )
+        if not train:
+            raise HTTPException(status_code=404, detail="Training not found")
+
+        questions_ids = train['question']
+
+        # Randomly select up to 20 question IDs
+        selected_ids = random.sample(questions_ids, min(20, len(questions_ids)))
+
+        question_list = []
+
+        for question_id in selected_ids:
+            question = mongo_client.find_one(
+                collection_name='question',
+                query={
+                    '_id': ObjectId(question_id)
+                }
+            )
+            if not question:
+                raise HTTPException(status_code=404, detail="Question not found")
+            question['_id'] = str(question['_id'])
+            question_list.append(question)
+        return {
+            "assessment": question_list
+        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
