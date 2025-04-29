@@ -248,12 +248,8 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
         if not training:
             raise HTTPException(status_code=404, detail="Training not found")
 
-        if language == "en":
-            training_name = training.get("training_name", "")
-            training_description = training.get("training_description", "")
-        else:
-            training_name = training.get("training_name_ar", "")
-            training_description = training.get("training_description_ar", "")
+        training_name = training.get("training_name", "") if language == "en" else training.get("training_name_ar", "")
+        training_description = training.get("training_description", "") if language == "en" else training.get("training_description_ar", "")
 
         total_time = 0
         correct = 0
@@ -264,14 +260,15 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
             "situational": {"correct": 0, "incorrect": 0}
         }
 
-        for idx, submitted_question in enumerate(assessment, 1):
+        for submitted_question in assessment:
             total_time += submitted_question.time
             original_question = mongo_client.find_one("question", {"_id": ObjectId(submitted_question.question_id)})
             if not original_question:
                 raise HTTPException(status_code=404, detail="Question not found")
 
             is_correct = original_question['correct_answer'] == submitted_question.selected_answer
-            category = original_question.get("question_category")
+            category = original_question.get("question_category", "uncategorized")
+
             if category not in category_counts:
                 category_counts[category] = {"correct": 0, "incorrect": 0}
 
@@ -281,7 +278,6 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
             else:
                 category_counts[category]["incorrect"] += 1
 
-            # For LLM analysis
             user_analyses_list.append({
                 "question": original_question['question'],
                 "user_answer": submitted_question.selected_answer,
@@ -292,11 +288,8 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
         total_questions = len(assessment)
         average_time = int(total_time / total_questions) if total_questions > 0 else 0
 
-        # === LLM returns skill assessments in required format ===
-        # Each entry: { name: str, score: int, level: str }
         skill_assessments = llm_client.analyses_user(user_analyses_list)
 
-        # Build question progress list with totals
         question_progress = [
             {
                 "category": category,
@@ -307,8 +300,6 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
             for category, counts in category_counts.items()
         ]
 
-        # Update user’s finished training list
-        finished_list = user.get("finished_training", [])
         results = {
             "correct_answers": correct,
             "incorrect_answers": total_questions - correct,
@@ -316,14 +307,20 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
             "average_answer_time": average_time,
             "course_title": training_name,
             "course_description": training_description,
-            "skill_assessments": skill_assessments,
+            "skill_assessments": [s.dict() for s in skill_assessments],  # ✅ FIX
             "question_progress": question_progress
         }
-        if training_id not in finished_list:
-            finished_list.append(training_id)
-            mongo_client.update_one("users", {"_id": ObjectId(user_id)},
-                                    {"finished_training": finished_list,
-                                             "pre_assessment": results})
+
+        finished_training = user["finished_training"]
+        finished_training.append(training_id)
+        mongo_client.update_one(
+            collection_name="users",
+            query={"_id": ObjectId(user_id)},
+            update={
+                "finished_training": finished_training,
+                "pre_assessment": results
+            }
+        )
 
         return results
 
@@ -331,6 +328,7 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.get("/get_final_assessment/{training_id}")
