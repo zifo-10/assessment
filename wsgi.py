@@ -455,66 +455,59 @@ def submit_post_assessment(user_id: str, training_id: str, assessment: List[Asse
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/dashboard/{user_id}/{training_id}")
-def dashboard(user_id: str, training_id: str):
+@app.post("/dashboard/{user_id}")
+def dashboard(user_id: str):
     try:
         user = mongo_client.find_one(
             collection_name='users',
             query={"_id": ObjectId(user_id)}
         )
 
-        assessment = mongo_client.find_one(collection_name='assessment', query={
+        training_names = []
+        finished_training = user['finished_training']
+        for id in finished_training:
+            train = mongo_client.find_one(
+                collection_name=course_collection,
+                query={
+                    '_id': ObjectId(id)
+                }
+            )
+            training_names.append(train['training_name'])
+
+        assessments = mongo_client.find(collection_name='assessment', query={
             'user_id': user_id,
-            'training_id': training_id
         })
-
-        if not assessment:
-            raise HTTPException(status_code=404, detail="Assessment not found")
-
-        pre = assessment.get("pre_assessment")
-        post = assessment.get("post_assessment")
-
-        if not pre or not post:
-            raise HTTPException(status_code=400, detail="Assessment data incomplete")
-
-        pre_score = pre['score_percentage']
-        post_score = post['score_percentage']
-        score_change = post_score - pre_score
-
-        improvement = (
-            "Improved" if score_change > 0
-            else "No Change" if score_change == 0
-            else "Declined"
-        )
-
-        improvement_percentage = (
-            round((score_change / pre_score) * 100, 2)
-            if pre_score > 0 else None
-        )
-
-        avg_time_change = post['average_answer_time'] - pre['average_answer_time']
+        courses_assessment_data = []
+        for assessment in assessments:
+            train_name = assessment['pre_assessment']['course_title']
+            train_pre_assessment_score = assessment['pre_assessment']['score_percentage']
+            pre_assessment_avg_time = assessment['pre_assessment']['average_answer_time']
+            train_post_assessment_score = assessment['post_assessment']['score_percentage']
+            post_assessment_avg_time = assessment['post_assessment']['average_answer_time']
+            train = {
+                'training_name': train_name,
+                'pre_assessment_score': train_pre_assessment_score,
+                'pre_assessment_avg_time': pre_assessment_avg_time,
+                'post_assessment_score': train_post_assessment_score,
+                'post_assessment_avg_time': post_assessment_avg_time,
+            }
+            courses_assessment_data.append(train)
 
         dashboard = {
             "student_name": user['name'],
-            "pre_assessment_score": pre_score,
-            "pre_assessment_exam_date": pre['exam_date'],
-            "final_exam_score": post_score,
-            "final_exam_exam_date": post['exam_date'],
-            "score_change": round(score_change, 2),
-            "improvement": improvement,
-            "improvement_percentage": improvement_percentage,
-            "average_answer_time_change": avg_time_change,
+            "courses_completed": len(user['finished_training']),
+            "courses_assessment": courses_assessment_data
         }
-        mongo_client.update_one(
-            collection_name="assessment",
-            query={
-                'user_id': user_id,
-                'training_id': training_id
-            },
-            update={
-                'dashboard': dashboard
-            }
-        )
+        # mongo_client.update_one(
+        #     collection_name="assessment",
+        #     query={
+        #         'user_id': user_id,
+        #         'training_id': training_id
+        #     },
+        #     update={
+        #         'dashboard': dashboard
+        #     }
+        # )
         return dashboard
 
     except HTTPException as e:
