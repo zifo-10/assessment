@@ -78,10 +78,7 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
         }
 
         for submitted_question in assessment:
-            print(submitted_question)
-            print('HI')
             total_time += submitted_question.time
-            print('DI')
             original_question = mongo_client.find_one(question_collection, {"_id": ObjectId(submitted_question.question_id)})
             if not original_question:
                 raise HTTPException(status_code=404, detail="Question not found")
@@ -364,6 +361,7 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
             query={"_id": ObjectId(user_id)}
         )
         results = get_assessment_analysis(user_id, training_id, assessment, language)
+        results['exam_date'] = datetime.now().strftime("%d-%m")
         finished_training = user["finished_training"]
         finished_training.append(training_id)
         mongo_client.update_one(
@@ -437,8 +435,8 @@ def submit_post_assessment(user_id: str, training_id: str, assessment: List[Asse
         if not pre_assessment:
             raise HTTPException(status_code=404, detail="Assessment not found")
         pre_assessment = pre_assessment.get("pre_assessment")
-        print(pre_assessment)
         results = get_assessment_analysis(user_id, training_id, assessment, language)
+        results['exam_date'] = datetime.now().strftime("%d-%m")
         mongo_client.update_one(
             collection_name="assessment",
             query={
@@ -449,9 +447,7 @@ def submit_post_assessment(user_id: str, training_id: str, assessment: List[Asse
                 "post_assessment": results
             }
         )
-        print(results)
-        results['final_exam_date'] = datetime.now().strftime("%d-%m")
-        results['pre_assessment_exam_date'] = datetime.now().strftime("%d-%m")
+        results['pre_assessment_exam_date'] = pre_assessment['exam_date']
         results['pre_assessment_score'] = pre_assessment['score_percentage']
         return results
     except HTTPException as e:
@@ -462,15 +458,67 @@ def submit_post_assessment(user_id: str, training_id: str, assessment: List[Asse
 @app.post("/dashboard/{user_id}/{training_id}")
 def dashboard(user_id: str, training_id: str):
     try:
+        user = mongo_client.find_one(
+            collection_name='users',
+            query={"_id": ObjectId(user_id)}
+        )
+
         assessment = mongo_client.find_one(collection_name='assessment', query={
             'user_id': user_id,
             'training_id': training_id
         })
+
         if not assessment:
             raise HTTPException(status_code=404, detail="Assessment not found")
-        pre_assessment = assessment.get("pre_assessment")
-        post_assessment = assessment.get("post_assessment")
+
+        pre = assessment.get("pre_assessment")
+        post = assessment.get("post_assessment")
+
+        if not pre or not post:
+            raise HTTPException(status_code=400, detail="Assessment data incomplete")
+
+        pre_score = pre['score_percentage']
+        post_score = post['score_percentage']
+        score_change = post_score - pre_score
+
+        improvement = (
+            "Improved" if score_change > 0
+            else "No Change" if score_change == 0
+            else "Declined"
+        )
+
+        improvement_percentage = (
+            round((score_change / pre_score) * 100, 2)
+            if pre_score > 0 else None
+        )
+
+        avg_time_change = post['average_answer_time'] - pre['average_answer_time']
+
+        dashboard = {
+            "student_name": user['name'],
+            "pre_assessment_score": pre_score,
+            "pre_assessment_exam_date": pre['exam_date'],
+            "final_exam_score": post_score,
+            "final_exam_exam_date": post['exam_date'],
+            "score_change": round(score_change, 2),
+            "improvement": improvement,
+            "improvement_percentage": improvement_percentage,
+            "average_answer_time_change": avg_time_change,
+        }
+        mongo_client.update_one(
+            collection_name="assessment",
+            query={
+                'user_id': user_id,
+                'training_id': training_id
+            },
+            update={
+                'dashboard': dashboard
+            }
+        )
+        return dashboard
+
     except HTTPException as e:
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
