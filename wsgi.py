@@ -28,6 +28,8 @@ app.add_middleware(
 mongo_uri = os.getenv('MONGO_URI')
 db_name = os.getenv('DB_NAME', 'assessment')
 job_collection = os.getenv('COLLECTION_NAME', 'new_job_with_questions')
+course_collection = 'course'
+question_collection = 'question_v2'
 llm_client = OpenAIClient()
 mongo_client = MongoDBClient(mongo_uri, db_name)
 
@@ -58,7 +60,7 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        training = mongo_client.find_one("train", {"_id": ObjectId(training_id)})
+        training = mongo_client.find_one(course_collection, {"_id": ObjectId(training_id)})
         if not training:
             raise HTTPException(status_code=404, detail="Training not found")
 
@@ -76,8 +78,11 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
         }
 
         for submitted_question in assessment:
+            print(submitted_question)
+            print('HI')
             total_time += submitted_question.time
-            original_question = mongo_client.find_one("question", {"_id": ObjectId(submitted_question.question_id)})
+            print('DI')
+            original_question = mongo_client.find_one(question_collection, {"_id": ObjectId(submitted_question.question_id)})
             if not original_question:
                 raise HTTPException(status_code=404, detail="Question not found")
 
@@ -116,7 +121,7 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
         ]
         score_percentage = round((correct / total_questions) * 100, 2) if total_questions > 0 else 0.0
         results = {
-            "submitted_at": datetime.now(),
+            "student_name": user['name'],
             "correct_answers": correct,
             "incorrect_answers": total_questions - correct,
             "total_questions": total_questions,
@@ -211,7 +216,7 @@ async def get_job(job_code: int, user_id: str):
 
         # Use sort key to preserve consistent order (e.g., by training_name or _id)
         get_train = list(mongo_client.find(
-            'train',
+            course_collection,
             query={"job_id": ObjectId(job['_id'])},
             sort=[("training_name", -1)]  # adjust this field as needed
         ))
@@ -229,7 +234,7 @@ async def get_job(job_code: int, user_id: str):
 
         for idx, train in enumerate(get_train):
             train_id_str = str(train['_id'])
-            level = get_levels(train['level'][0]['difficulty'])
+            level = get_levels(train['levels'][0]['difficulty'])
 
             # Determine status
             if train_id_str in finished_training_ids:
@@ -259,7 +264,7 @@ async def get_job(job_code: int, user_id: str):
 def get_training_details(training_id: str):
     try:
         train = mongo_client.find_one(
-            collection_name='train',
+            collection_name=course_collection,
             query={
                 "_id": ObjectId(training_id)
             }
@@ -282,11 +287,12 @@ def get_training_details(training_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/final_assessment_details/{training_id}")
 def final_assessment_details(training_id: str):
     try:
         train = mongo_client.find_one(
-            collection_name='train',
+            collection_name=course_collection,
             query={
                 "_id": ObjectId(training_id)
             }
@@ -315,7 +321,7 @@ def final_assessment_details(training_id: str):
 def get_training_details(training_id: str):
     try:
         train = mongo_client.find_one(
-            collection_name='train',
+            collection_name=course_collection,
             query={
                 "_id": ObjectId(training_id)
             }
@@ -332,7 +338,7 @@ def get_training_details(training_id: str):
 
         for question_id in selected_ids:
             question = mongo_client.find_one(
-                collection_name='question',
+                collection_name=question_collection,
                 query={
                     '_id': ObjectId(question_id)
                 }
@@ -386,7 +392,7 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
 def get_final_assessment(training_id: str):
     try:
         train = mongo_client.find_one(
-            collection_name='train',
+            collection_name=course_collection,
             query={
                 "_id": ObjectId(training_id)
             }
@@ -403,7 +409,7 @@ def get_final_assessment(training_id: str):
 
         for question_id in selected_ids:
             question = mongo_client.find_one(
-                collection_name='question',
+                collection_name=question_collection,
                 query={
                     '_id': ObjectId(question_id)
                 }
@@ -424,6 +430,14 @@ def get_final_assessment(training_id: str):
 @app.post("/submit_post_assessment/{user_id}/{training_id}")
 def submit_post_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "Arabic"):
     try:
+        pre_assessment = mongo_client.find_one(collection_name='assessment', query={
+            'user_id': user_id,
+            'training_id': training_id
+        })
+        if not pre_assessment:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+        pre_assessment = pre_assessment.get("pre_assessment")
+        print(pre_assessment)
         results = get_assessment_analysis(user_id, training_id, assessment, language)
         mongo_client.update_one(
             collection_name="assessment",
@@ -435,6 +449,10 @@ def submit_post_assessment(user_id: str, training_id: str, assessment: List[Asse
                 "post_assessment": results
             }
         )
+        print(results)
+        results['final_exam_date'] = datetime.now().strftime("%d-%m")
+        results['pre_assessment_exam_date'] = datetime.now().strftime("%d-%m")
+        results['pre_assessment_score'] = pre_assessment['score_percentage']
         return results
     except HTTPException as e:
         raise e
