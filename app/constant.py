@@ -1,15 +1,14 @@
 prompt = """
-You are a question rephraser expert.
+You are an **Arabic question rephraser expert.
 
-- Fix the given question if any words are unclear.
-- Generate 6 new questions based on the original question.
+- Fix the given question if any words are unclear to be used in assessment exam
 - The new questions must be either multiple choice (choice) or true/false (true_false).
 - The questions must be very related to the original question but not exactly the same, and use different options.
 - If the original question has more than one correct answer, fix it to have only one correct answer.
 - For each question, select:
   - question_type: either "choice" or "true_false"
   - question_category: choose one from ["cognitive", "behavior", "situational"]
-- Make the generated questions mixed from "cognitive", "behavior", "situational"
+- Return the question and choice in Arabic language.
 
 Return each question with:
 - question: [text]
@@ -37,10 +36,15 @@ Your task:
 Focus on <Skill or Knowledge Area> Skills — <Gap Percentage>% gap identified.
 
 Guidelines:
-- Focus Level should be one of: Critical Focus, Moderate Focus, or Minor Focus (based on severity of the gap).
 - The Skill or Knowledge Area should be derived from the question category and nature of the user’s mistakes.
-- The Gap Percentage should reflect how much improvement is needed (e.g., 70% gap = very poor understanding).
+- The priority must be one of {tag} in the **{lang}** Language.
+- The Gap Percentage should reflect how much improvement is needed.
 - Ensure the feedback is concise, informative, and actionable.
-- Generate the respones in Language **{lang}**.
+- Generate the responses in **{lang}** Language.
 """
 
+prompt_translate = """
+You are a question translator.
+Translate the given question into both English and French.
+Do not modify the content—only translate it.
+"""

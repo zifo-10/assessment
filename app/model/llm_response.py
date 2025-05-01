@@ -45,8 +45,11 @@ class ScenarioQuestion(BaseModel):
 
 
 class Analysis(BaseModel):
-    tag: str = Field(..., description="Tag for the analysis")
-    analysis: str = Field(..., description="Analysis text")
+    gap: str = Field(..., description="The percentage of the gap")
+    priority: str = Field(..., description="Priority level")
+    ai_analysis: str = Field(..., description="Analysis text")
+    title: str = Field(..., description="Summary in two or three words")
+
 
 class AnalysisResult(BaseModel):
     feedback: List[Analysis] = Field(..., description="List of feedback items")

@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-
+from app.utils.utils import  generate_certificate
 from app.client.llm_client import OpenAIClient
 from app.client.mongo_client import MongoDBClient
 
@@ -80,7 +80,8 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
 
         for submitted_question in assessment:
             total_time += submitted_question.time
-            original_question = mongo_client.find_one(question_collection, {"_id": ObjectId(submitted_question.question_id)})
+            original_question = mongo_client.find_one(question_collection,
+                                                      {"_id": ObjectId(submitted_question.question_id)})
             if not original_question:
                 raise HTTPException(status_code=404, detail="Question not found")
 
@@ -91,7 +92,8 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
                 lang_key = f"question_{language.lower()}"
                 question_data = original_question.get(lang_key)
                 if not question_data:
-                    raise HTTPException(status_code=400, detail=f"Language '{language}' not supported for this question.")
+                    raise HTTPException(status_code=400,
+                                        detail=f"Language '{language}' not supported for this question.")
 
             is_correct = question_data['correct_answer'] == submitted_question.selected_answer
             category = question_data.get("question_category", "uncategorized")
@@ -371,13 +373,13 @@ def get_training_details(training_id: str, language: str = 'en'):
             if language == 'ar':
                 question['_id'] = str(question['_id'])
                 question_list.append({
-                        '_id': str(question['_id']),
-                        'question': question['question'],
-                        'options': question['options'],
-                        'correct_answer': question['correct_answer'],
-                        'question_type': question['question_type'],
-                        'question_category': question['question_category']
-                    })
+                    '_id': str(question['_id']),
+                    'question': question['question'],
+                    'options': question['options'],
+                    'correct_answer': question['correct_answer'],
+                    'question_type': question['question_type'],
+                    'question_category': question['question_category']
+                })
             elif language == 'en':
                 question_list.append(
                     {
@@ -512,7 +514,7 @@ def get_final_assessment(training_id: str, language: str):
 
 
 @app.post("/submit_post_assessment/{user_id}/{training_id}")
-def submit_post_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "Arabic"):
+def submit_post_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str):
     try:
         pre_assessment = mongo_client.find_one(collection_name='assessment', query={
             'user_id': user_id,
@@ -540,6 +542,7 @@ def submit_post_assessment(user_id: str, training_id: str, assessment: List[Asse
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/dashboard/{user_id}")
 def dashboard(user_id: str):
@@ -601,3 +604,22 @@ def dashboard(user_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/certificate/{user_id}")
+def certificate(user_id: str):
+    try:
+        user = mongo_client.find_one(
+            collection_name='users',
+            query={"_id": ObjectId(user_id)}
+        )
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        base64_image = generate_certificate(name=user['name'])
+
+        return {"image_base64": base64_image}
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

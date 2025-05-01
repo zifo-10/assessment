@@ -74,15 +74,18 @@ class OpenAIClient:
 
     def analyses_user(self, user_answers: list, language: str = 'en'):
         try:
-            print(language)
+            if language == 'ar':
+                tag = ["معرفي", "سلوكي", "موقفي"]
+            else:
+                tag = ["cognitive", "behavior", "situational"]
             response = self.client.beta.chat.completions.parse(
                 model=self.model,
                 messages=[ChatCompletionSystemMessageParam(
                     role="system",
-                    content=user_analyses_prompt.replace("{lang}", language)),
+                    content=user_analyses_prompt.replace("{lang}", language).replace("{tag}", str(tag))),
                     ChatCompletionUserMessageParam(
                         role="user",
-                        content=str(user_answers) + f"\nAnswer in {language} language:"
+                        content=str(user_answers) + f"\nFull Answer in {language} language:"
                     )
                 ],
                 temperature=0,
