@@ -54,7 +54,7 @@ def get_levels(difficulty):
     return levels.get(difficulty)
 
 
-def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Assessment], language: str = "Arabic"):
+def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Assessment], language: str):
     try:
         user = mongo_client.find_one("users", {"_id": ObjectId(user_id)})
         if not user:
@@ -64,9 +64,10 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
         if not training:
             raise HTTPException(status_code=404, detail="Training not found")
 
-        training_name = training.get("training_name", "") if language == "en" else training.get("training_name_ar", "")
-        training_description = training.get("training_description", "") if language == "en" else training.get(
-            "training_description_ar", "")
+        training_name = training['training_name']
+        training_name_en = training['name_en']
+        training_description = training['description_ar']
+        training_description_en = training['description_en']
 
         total_time = 0
         correct = 0
@@ -83,8 +84,17 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
             if not original_question:
                 raise HTTPException(status_code=404, detail="Question not found")
 
-            is_correct = original_question['correct_answer'] == submitted_question.selected_answer
-            category = original_question.get("question_category", "uncategorized")
+            # Get localized question data
+            if language.lower() == "ar":
+                question_data = original_question
+            else:
+                lang_key = f"question_{language.lower()}"
+                question_data = original_question.get(lang_key)
+                if not question_data:
+                    raise HTTPException(status_code=400, detail=f"Language '{language}' not supported for this question.")
+
+            is_correct = question_data['correct_answer'] == submitted_question.selected_answer
+            category = question_data.get("question_category", "uncategorized")
 
             if category not in category_counts:
                 category_counts[category] = {"correct": 0, "incorrect": 0}
@@ -96,9 +106,9 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
                 category_counts[category]["incorrect"] += 1
 
             user_analyses_list.append({
-                "question": original_question['question'],
+                "question": question_data['question'],
                 "user_answer": submitted_question.selected_answer,
-                "correct_answer": original_question['correct_answer'],
+                "correct_answer": question_data['correct_answer'],
                 "question_category": category,
             })
 
@@ -123,9 +133,11 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
             "incorrect_answers": total_questions - correct,
             "total_questions": total_questions,
             "average_answer_time": average_time,
-            "score_percentage": score_percentage,  # ✅ Add this line
+            "score_percentage": score_percentage,
             "course_title": training_name,
+            "course_title_en": training_name_en,
             "course_description": training_description,
+            "course_description_en": training_description_en,
             "skill_assessments": [s.dict() for s in skill_assessments],
             "question_progress": question_progress
         }
@@ -192,8 +204,8 @@ async def get_user_by_id(user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/job_trainings/{job_code}/{user_id}")
-async def get_job(job_code: int, user_id: str):
+@app.get("/job_trainings/{job_code}/{user_id}/{language}")
+async def get_job(job_code: int, user_id: str, language: str):
     try:
         job = mongo_client.find_one(
             job_collection,
@@ -212,10 +224,15 @@ async def get_job(job_code: int, user_id: str):
         finished_training_ids = [str(tid) for tid in user.get('finished_training', [])]
 
         # Use sort key to preserve consistent order (e.g., by training_name or _id)
-        get_train = list(mongo_client.find(
+        get_train = list(mongo_client.aggregate(
             course_collection,
-            query={"job_id": ObjectId(job['_id'])},
-            sort=[("training_name", -1)]  # adjust this field as needed
+            pipeline=[
+                {"$match": {"job_id": ObjectId(job['_id'])}},
+                {"$addFields": {
+                    "max_difficulty": {"$max": "$levels.difficulty"}
+                }},
+                {"$sort": {"max_difficulty": -1}}
+            ]
         ))
         if not get_train:
             raise HTTPException(status_code=404, detail="No training found")
@@ -240,14 +257,19 @@ async def get_job(job_code: int, user_id: str):
                 status = True
             else:
                 status = False
-
+            if language == 'en':
+                training_name = train['name_en']
+                train_description = train['description_en']
+            else:
+                training_name = train['training_name']
+                train_description = train['description_ar']
             training_list.append({
-                "train_name": train['training_name'],
+                "train_name": training_name,
+                "train_description": train_description,
                 "train_level": level,
                 "training_id": train_id_str,
                 "status": status
             })
-
         return {
             "training": training_list
         }
@@ -257,8 +279,8 @@ async def get_job(job_code: int, user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/training_details/{training_id}")
-def get_training_details(training_id: str):
+@app.get("/training_details/{training_id}/{language}")
+def get_training_details(training_id: str, language: str):
     try:
         train = mongo_client.find_one(
             collection_name=course_collection,
@@ -268,13 +290,15 @@ def get_training_details(training_id: str):
         )
         if not train:
             raise HTTPException(status_code=404, detail="Training not found")
-
-        question_number = len(train['question'])
-
+        if language == 'en':
+            training_name = train['name_en']
+            train_description = train['description_en']
+        else:
+            training_name = train['training_name']
+            train_description = train['description_ar']
         training_details = {
-            "train_name": train['training_name'],
-            "train_description_ar": "",
-            "train_description_en": "",
+            "train_name": training_name,
+            "train_description": train_description,
             "question_number": 15,
             "time": 15,
         }
@@ -285,8 +309,8 @@ def get_training_details(training_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/final_assessment_details/{training_id}")
-def final_assessment_details(training_id: str):
+@app.get("/final_assessment_details/{training_id}/{language}")
+def final_assessment_details(training_id: str, language: str):
     try:
         train = mongo_client.find_one(
             collection_name=course_collection,
@@ -296,13 +320,15 @@ def final_assessment_details(training_id: str):
         )
         if not train:
             raise HTTPException(status_code=404, detail="Training not found")
-
-        question_number = len(train['question'])
-
+        if language == 'en':
+            training_name = train['name_en']
+            train_description = train['description_en']
+        else:
+            training_name = train['training_name']
+            train_description = train['description_ar']
         training_details = {
-            "train_name": train['training_name'],
-            "train_description_ar": "",
-            "train_description_en": "",
+            "train_name": training_name,
+            "train_description": train_description,
             "question_number": 20,
             "time": 20,
             "pass_mark": 70
@@ -314,8 +340,8 @@ def final_assessment_details(training_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/get_pre_assessment/{training_id}")
-def get_training_details(training_id: str):
+@app.get("/get_pre_assessment/{training_id}/{language}")
+def get_training_details(training_id: str, language: str = 'en'):
     try:
         train = mongo_client.find_one(
             collection_name=course_collection,
@@ -342,8 +368,38 @@ def get_training_details(training_id: str):
             )
             if not question:
                 raise HTTPException(status_code=404, detail="Question not found")
-            question['_id'] = str(question['_id'])
-            question_list.append(question)
+            if language == 'ar':
+                question['_id'] = str(question['_id'])
+                question_list.append({
+                        '_id': str(question['_id']),
+                        'question': question['question'],
+                        'options': question['options'],
+                        'correct_answer': question['correct_answer'],
+                        'question_type': question['question_type'],
+                        'question_category': question['question_category']
+                    })
+            elif language == 'en':
+                question_list.append(
+                    {
+                        '_id': str(question['_id']),
+                        'question': question['question_en']['question'],
+                        'options': question['question_en']['options'],
+                        'correct_answer': question['question_en']['correct_answer'],
+                        'question_type': question['question_en']['question_type'],
+                        'question_category': question['question_en']['question_category']
+                    }
+                )
+            elif language == 'fr':
+                question_list.append(
+                    {
+                        '_id': str(question['_id']),
+                        'question': question['question_fr']['question'],
+                        'options': question['question_fr']['options'],
+                        'correct_answer': question['question_fr']['correct_answer'],
+                        'question_type': question['question_fr']['question_type'],
+                        'question_category': question['question_fr']['question_category']
+                    }
+                )
         return {
             "assessment": question_list
         }
@@ -354,7 +410,7 @@ def get_training_details(training_id: str):
 
 
 @app.post("/submit_pre_assessment/{user_id}/{training_id}")
-def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "Arabic"):
+def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "en"):
     try:
         user = mongo_client.find_one(
             collection_name='users',
@@ -386,8 +442,8 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/get_final_assessment/{training_id}")
-def get_final_assessment(training_id: str):
+@app.get("/get_final_assessment/{training_id}/{language}")
+def get_final_assessment(training_id: str, language: str):
     try:
         train = mongo_client.find_one(
             collection_name=course_collection,
@@ -414,8 +470,38 @@ def get_final_assessment(training_id: str):
             )
             if not question:
                 raise HTTPException(status_code=404, detail="Question not found")
-            question['_id'] = str(question['_id'])
-            question_list.append(question)
+            if language == 'ar':
+                question['_id'] = str(question['_id'])
+                question_list.append({
+                    '_id': str(question['_id']),
+                    'question': question['question'],
+                    'options': question['options'],
+                    'correct_answer': question['correct_answer'],
+                    'question_type': question['question_type'],
+                    'question_category': question['question_category']
+                })
+            elif language == 'en':
+                question_list.append(
+                    {
+                        '_id': str(question['_id']),
+                        'question': question['question_en']['question'],
+                        'options': question['question_en']['options'],
+                        'correct_answer': question['question_en']['correct_answer'],
+                        'question_type': question['question_en']['question_type'],
+                        'question_category': question['question_en']['question_category']
+                    }
+                )
+            elif language == 'fr':
+                question_list.append(
+                    {
+                        '_id': str(question['_id']),
+                        'question': question['question_fr']['question'],
+                        'options': question['question_fr']['options'],
+                        'correct_answer': question['question_fr']['correct_answer'],
+                        'question_type': question['question_fr']['question_type'],
+                        'question_category': question['question_fr']['question_category']
+                    }
+                )
         return {
             "assessment": question_list
         }
