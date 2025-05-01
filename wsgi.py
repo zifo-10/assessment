@@ -551,9 +551,10 @@ def dashboard(user_id: str):
             collection_name='users',
             query={"_id": ObjectId(user_id)}
         )
-
         training_names = []
-        finished_training = user['finished_training']
+        finished_training = user.get('finished_training')
+        if not finished_training:
+            raise HTTPException(status_code=404, detail="Finished training not found")
         for id in finished_training:
             train = mongo_client.find_one(
                 collection_name=course_collection,
