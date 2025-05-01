@@ -320,6 +320,13 @@ def final_assessment_details(training_id: str, language: str):
                 "_id": ObjectId(training_id)
             }
         )
+        level = train['levels'][0]['difficulty']
+        if level== 1:
+            mark = 70
+        elif level == 2:
+            mark = 80
+        elif level == 3:
+            mark = 90
         if not train:
             raise HTTPException(status_code=404, detail="Training not found")
         if language == 'en':
@@ -333,7 +340,7 @@ def final_assessment_details(training_id: str, language: str):
             "train_description": train_description,
             "question_number": 20,
             "time": 20,
-            "pass_mark": 70
+            "pass_mark": mark
         }
         return training_details
     except HTTPException as e:
