@@ -562,6 +562,8 @@ def dashboard(user_id: str):
                     '_id': ObjectId(id)
                 }
             )
+            if not train:
+                raise HTTPException(status_code=404, detail="This use have not finihsed any train yet")
             training_names.append(train['training_name'])
 
         assessments = mongo_client.find(collection_name='assessment', query={
