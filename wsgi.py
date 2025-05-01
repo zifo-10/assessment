@@ -243,28 +243,27 @@ async def get_job(job_code: int, user_id: str, language: str):
         next_opened = False
         last_finished_index = -1
 
-        # Find the index of the last finished training
-        for idx, train in enumerate(get_train):
-            if str(train['_id']) in finished_training_ids:
-                last_finished_index = idx
+        opened_assigned = False
 
-        for idx, train in enumerate(get_train):
+        for train in get_train:
             train_id_str = str(train['_id'])
             level = get_levels(train['levels'][0]['difficulty'])
 
-            # Determine status
             if train_id_str in finished_training_ids:
                 status = True
-            elif idx == last_finished_index + 1:
+            elif not opened_assigned:
                 status = True
+                opened_assigned = True
             else:
                 status = False
+
             if language == 'en':
                 training_name = train['name_en']
                 train_description = train['description_en']
             else:
                 training_name = train['training_name']
                 train_description = train['description_ar']
+
             training_list.append({
                 "train_name": training_name,
                 "train_description": train_description,
@@ -272,6 +271,7 @@ async def get_job(job_code: int, user_id: str, language: str):
                 "training_id": train_id_str,
                 "status": status
             })
+
         return {
             "training": training_list
         }
