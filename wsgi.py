@@ -273,6 +273,7 @@ async def get_job(job_code: int, user_id: str, language: str):
             })
 
         return {
+            "job_name": job["job_name"],
             "training": training_list
         }
     except HTTPException as e:

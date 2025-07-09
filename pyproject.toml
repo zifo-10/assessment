@@ -1,0 +1,31 @@
+[project]
+name = "assessment"
+version = "0.1.0"
+requires-python = ">=3.9,<4.0"
+dependencies = [
+    "fastapi>=0.110.0,<1.0.0",
+    "uvicorn>=0.29.0,<1.0.0",
+    "python-multipart>=0.0.20",
+    "python-dotenv>=1.1.0",
+    "pydantic-settings>=2.9.1",
+    "aiofiles>=24.1.0",
+    "enums>=0.0.2",
+    "pyobjectid>=0.1.4",
+    "pymongo>=4.12.0",
+    "openai>=1.76.1",
+    "bson>=0.5.10",
+    "arabic-reshaper>=3.0.0",
+    "python-bidi>=0.6.6",
+    "pillow>=11.2.1",
+]
+
+[tool.pdm]
+[tool.pdm.dev-dependencies]
+dev = ["pytest>=8.1.1,<9.0.0"]
+
+[tool.pdm.build]
+includes = ["app"]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
