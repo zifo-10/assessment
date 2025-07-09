@@ -215,7 +215,7 @@ async def get_job(job_code: int, user_id: str, language: str):
         )
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
-
+        job_name = job['job_name']
         user = mongo_client.find_one(
             collection_name='users',
             query={"_id": ObjectId(user_id)}
@@ -258,6 +258,7 @@ async def get_job(job_code: int, user_id: str, language: str):
                 status = False
 
             if language == 'en':
+                job_name = job['job_name_en']
                 training_name = train['name_en']
                 train_description = train['description_en']
             else:
@@ -273,7 +274,7 @@ async def get_job(job_code: int, user_id: str, language: str):
             })
 
         return {
-            "job_name": job["job_name"],
+            "job_name": job_name,
             "training": training_list
         }
     except HTTPException as e:
