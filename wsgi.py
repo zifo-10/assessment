@@ -64,7 +64,7 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
         if not training:
             raise HTTPException(status_code=404, detail="Training not found")
 
-        training_name = training['training_name']
+        training_name = training['name_ar']
         training_name_en = training['name_en']
         training_description = training['description_ar']
         training_description_en = training['description_en']
@@ -262,7 +262,7 @@ async def get_job(job_code: int, user_id: str, language: str):
                 training_name = train['name_en']
                 train_description = train['description_en']
             else:
-                training_name = train['training_name']
+                training_name = train['name_ar']
                 train_description = train['description_ar']
 
             training_list.append({
@@ -298,7 +298,7 @@ def get_training_details(training_id: str, language: str):
             training_name = train['name_en']
             train_description = train['description_en']
         else:
-            training_name = train['training_name']
+            training_name = train['name_ar']
             train_description = train['description_ar']
         training_details = {
             "train_name": training_name,
@@ -335,7 +335,7 @@ def final_assessment_details(training_id: str, language: str):
             training_name = train['name_en']
             train_description = train['description_en']
         else:
-            training_name = train['training_name']
+            training_name = train['name_ar']
             train_description = train['description_ar']
         training_details = {
             "train_name": training_name,
@@ -573,7 +573,7 @@ def dashboard(user_id: str):
             )
             if not train:
                 raise HTTPException(status_code=404, detail="This use have not finihsed any train yet")
-            training_names.append(train['training_name'])
+            training_names.append(train['name_ar'])
 
         assessments = mongo_client.find(collection_name='assessment', query={
             'user_id': user_id,
