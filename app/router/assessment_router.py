@@ -1,37 +1,15 @@
-import os
 import random
 from datetime import datetime
 from typing import List
 
 from bson import ObjectId
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, APIRouter
 from pydantic import BaseModel
-from app.utils.utils import  generate_certificate
-from app.client.llm_client import OpenAIClient
-from app.client.mongo_client import MongoDBClient
 
-app = FastAPI()
+from app.constant_manager import CollectionNames
+from app.container import mongo_client, llm_client
 
-load_dotenv()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-mongo_uri = os.getenv('MONGO_URI')
-db_name = os.getenv('DB_NAME', 'assessment')
-job_collection = os.getenv('COLLECTION_NAME', 'new_job_with_questions')
-course_collection = 'course'
-question_collection = 'question_v2'
-llm_client = OpenAIClient()
-mongo_client = MongoDBClient(mongo_uri, db_name)
+assessment_router = APIRouter()
 
 
 class Assessment(BaseModel):
@@ -40,27 +18,13 @@ class Assessment(BaseModel):
     time: int
 
 
-@app.get("/healthcheck")
-def healthcheck():
-    return JSONResponse(status_code=200, content={"message": "healthy"})
-
-
-def get_levels(difficulty):
-    levels = {
-        1: "Complementary",
-        2: "Secondary",
-        3: "Mandatory"
-    }
-    return levels.get(difficulty)
-
-
 def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Assessment], language: str):
     try:
         user = mongo_client.find_one("users", {"_id": ObjectId(user_id)})
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        training = mongo_client.find_one(course_collection, {"_id": ObjectId(training_id)})
+        training = mongo_client.find_one(CollectionNames.course_collection, {"_id": ObjectId(training_id)})
         if not training:
             raise HTTPException(status_code=404, detail="Training not found")
 
@@ -80,7 +44,7 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
 
         for submitted_question in assessment:
             total_time += submitted_question.time
-            original_question = mongo_client.find_one(question_collection,
+            original_question = mongo_client.find_one(CollectionNames.question_collection,
                                                       {"_id": ObjectId(submitted_question.question_id)})
             if not original_question:
                 raise HTTPException(status_code=404, detail="Question not found")
@@ -150,180 +114,18 @@ def get_assessment_analysis(user_id: str, training_id: str, assessment: List[Ass
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/register")
-async def register_user(email: str, password: str, name: str):
-    try:
-        user_existed = mongo_client.find_one("users", {"email": email})
-        if user_existed:
-            raise HTTPException(status_code=400, detail="User with this email already exists")
-        insert_user = mongo_client.insert_one(
-            collection_name='users',
-            document={
-                "name": name,
-                "email": email,
-                "password": password,
-                "finished_training": [],
-            }
-        )
-        return {'user_id': str(insert_user)}
-    except HTTPException as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/login")
-async def login_user(email: str, password: str):
-    try:
-        user = mongo_client.find_one(
-            collection_name='users',
-            query={
-                "email": email,
-                "password": password,
-            }
-        )
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        user['_id'] = str(user['_id'])
-        return user
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/user/{user_id}")
-async def get_user_by_id(user_id: str):
-    try:
-        user = mongo_client.find_one(collection_name='users', query={"_id": ObjectId(user_id)})
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        user['_id'] = str(user['_id'])
-        return user
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/job_trainings/{job_code}/{user_id}/{language}")
-async def get_job(job_code: int, user_id: str, language: str):
-    try:
-        job = mongo_client.find_one(
-            job_collection,
-            query={"job_code": job_code}
-        )
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        job_name = job['job_name']
-        user = mongo_client.find_one(
-            collection_name='users',
-            query={"_id": ObjectId(user_id)}
-        )
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        finished_training_ids = [str(tid) for tid in user.get('finished_training', [])]
-
-        # Use sort key to preserve consistent order (e.g., by training_name or _id)
-        get_train = list(mongo_client.aggregate(
-            course_collection,
-            pipeline=[
-                {"$match": {"job_id": ObjectId(job['_id'])}},
-                {"$addFields": {
-                    "max_difficulty": {"$max": "$levels.difficulty"}
-                }},
-                {"$sort": {"max_difficulty": -1}}
-            ]
-        ))
-        if not get_train:
-            raise HTTPException(status_code=404, detail="No training found")
-
-        training_list = []
-        next_opened = False
-        last_finished_index = -1
-
-        opened_assigned = False
-
-        for train in get_train:
-            train_id_str = str(train['_id'])
-            level = get_levels(train['levels'][0]['difficulty'])
-
-            if train_id_str in finished_training_ids:
-                status = True
-            elif not opened_assigned:
-                status = True
-                opened_assigned = True
-            else:
-                status = False
-
-            if language == 'en':
-                job_name = job['job_name_en']
-                training_name = train['name_en']
-                train_description = train['description_en']
-            else:
-                training_name = train['name_ar']
-                train_description = train['description_ar']
-
-            training_list.append({
-                "train_name": training_name,
-                "train_description": train_description,
-                "train_level": level,
-                "training_id": train_id_str,
-                "status": status
-            })
-
-        return {
-            "job_name": job_name,
-            "training": training_list
-        }
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/training_details/{training_id}/{language}")
-def get_training_details(training_id: str, language: str):
-    try:
-        train = mongo_client.find_one(
-            collection_name=course_collection,
-            query={
-                "_id": ObjectId(training_id)
-            }
-        )
-        if not train:
-            raise HTTPException(status_code=404, detail="Training not found")
-        if language == 'en':
-            training_name = train['name_en']
-            train_description = train['description_en']
-        else:
-            training_name = train['name_ar']
-            train_description = train['description_ar']
-        training_details = {
-            "train_name": training_name,
-            "train_description": train_description,
-            "question_number": 15,
-            "time": 15,
-        }
-        return training_details
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/final_assessment_details/{training_id}/{language}")
+@assessment_router.get("/final_assessment_details/{training_id}/{language}")
 def final_assessment_details(training_id: str, language: str):
     try:
+        mark = 0
         train = mongo_client.find_one(
-            collection_name=course_collection,
+            collection_name=CollectionNames.course_collection,
             query={
                 "_id": ObjectId(training_id)
             }
         )
         level = train['levels'][0]['difficulty']
-        if level== 1:
+        if level == 1:
             mark = 70
         elif level == 2:
             mark = 80
@@ -351,11 +153,11 @@ def final_assessment_details(training_id: str, language: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/get_pre_assessment/{training_id}/{language}")
+@assessment_router.get("/get_pre_assessment/{training_id}/{language}")
 def get_training_details(training_id: str, language: str = 'en'):
     try:
         train = mongo_client.find_one(
-            collection_name=course_collection,
+            collection_name=CollectionNames.course_collection,
             query={
                 "_id": ObjectId(training_id)
             }
@@ -372,7 +174,7 @@ def get_training_details(training_id: str, language: str = 'en'):
 
         for question_id in selected_ids:
             question = mongo_client.find_one(
-                collection_name=question_collection,
+                collection_name=CollectionNames.question_collection,
                 query={
                     '_id': ObjectId(question_id)
                 }
@@ -420,7 +222,7 @@ def get_training_details(training_id: str, language: str = 'en'):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/submit_pre_assessment/{user_id}/{training_id}")
+@assessment_router.post("/submit_pre_assessment/{user_id}/{training_id}")
 def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str = "en"):
     try:
         user = mongo_client.find_one(
@@ -453,11 +255,11 @@ def submit_pre_assessment(user_id: str, training_id: str, assessment: List[Asses
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/get_final_assessment/{training_id}/{language}")
+@assessment_router.get("/get_final_assessment/{training_id}/{language}")
 def get_final_assessment(training_id: str, language: str):
     try:
         train = mongo_client.find_one(
-            collection_name=course_collection,
+            collection_name=CollectionNames.course_collection,
             query={
                 "_id": ObjectId(training_id)
             }
@@ -474,7 +276,7 @@ def get_final_assessment(training_id: str, language: str):
 
         for question_id in selected_ids:
             question = mongo_client.find_one(
-                collection_name=question_collection,
+                collection_name=CollectionNames.question_collection,
                 query={
                     '_id': ObjectId(question_id)
                 }
@@ -522,7 +324,7 @@ def get_final_assessment(training_id: str, language: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/submit_post_assessment/{user_id}/{training_id}")
+@assessment_router.post("/submit_post_assessment/{user_id}/{training_id}")
 def submit_post_assessment(user_id: str, training_id: str, assessment: List[Assessment], language: str):
     try:
         pre_assessment = mongo_client.find_one(collection_name='assessment', query={
@@ -547,90 +349,6 @@ def submit_post_assessment(user_id: str, training_id: str, assessment: List[Asse
         results['pre_assessment_exam_date'] = pre_assessment['exam_date']
         results['pre_assessment_score'] = pre_assessment['score_percentage']
         return results
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/dashboard/{user_id}")
-def dashboard(user_id: str):
-    try:
-        user = mongo_client.find_one(
-            collection_name='users',
-            query={"_id": ObjectId(user_id)}
-        )
-        training_names = []
-        finished_training = user.get('finished_training')
-        if not finished_training:
-            raise HTTPException(status_code=404, detail="Finished training not found")
-        for id in finished_training:
-            train = mongo_client.find_one(
-                collection_name=course_collection,
-                query={
-                    '_id': ObjectId(id)
-                }
-            )
-            if not train:
-                raise HTTPException(status_code=404, detail="This use have not finihsed any train yet")
-            training_names.append(train['name_ar'])
-
-        assessments = mongo_client.find(collection_name='assessment', query={
-            'user_id': user_id,
-        })
-        courses_assessment_data = []
-        for assessment in assessments:
-            train_name = assessment['pre_assessment']['course_title']
-            train_pre_assessment_score = assessment['pre_assessment']['score_percentage']
-            pre_assessment_avg_time = assessment['pre_assessment']['average_answer_time']
-            train_post_assessment_score = assessment['post_assessment']['score_percentage']
-            post_assessment_avg_time = assessment['post_assessment']['average_answer_time']
-            train = {
-                'training_name': train_name,
-                'pre_assessment_score': train_pre_assessment_score,
-                'pre_assessment_avg_time': pre_assessment_avg_time,
-                'post_assessment_score': train_post_assessment_score,
-                'post_assessment_avg_time': post_assessment_avg_time,
-            }
-            courses_assessment_data.append(train)
-
-        dashboard = {
-            "student_name": user['name'],
-            "courses_completed": len(user['finished_training']),
-            "courses_assessment": courses_assessment_data
-        }
-        # mongo_client.update_one(
-        #     collection_name="assessment",
-        #     query={
-        #         'user_id': user_id,
-        #         'training_id': training_id
-        #     },
-        #     update={
-        #         'dashboard': dashboard
-        #     }
-        # )
-        return dashboard
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/certificate/{user_id}")
-def certificate(user_id: str):
-    try:
-        user = mongo_client.find_one(
-            collection_name='users',
-            query={"_id": ObjectId(user_id)}
-        )
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        base64_image = generate_certificate(name=user['name'])
-
-        return {"image_base64": base64_image}
-
     except HTTPException as e:
         raise e
     except Exception as e:

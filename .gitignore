@@ -106,7 +106,7 @@ __pypackages__/
 
 # dotenv
 .env
-.env.*
+.env
 
 # virtualenv
 venv/

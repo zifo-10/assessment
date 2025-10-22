@@ -215,9 +215,9 @@ class JobDetailsController:
             return None
 
 
-# Example usage
-if __name__ == "__main__":
-    controller = JobDetailsController(mongo_client, llm_client)
-    job_id = "68064030a146a64ef0b0d2cd"
-    prompt_id = "680656c3950a52dabdb5967f"
-    controller.generate_job_detail(job_id, prompt_id)
+# # Example usage
+# if __name__ == "__main__":
+#     controller = JobDetailsController(mongo_client, llm_client)
+#     job_id = "68064030a146a64ef0b0d2cd"
+#     prompt_id = "680656c3950a52dabdb5967f"
+#     controller.generate_job_detail(job_id, prompt_id)

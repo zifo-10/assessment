@@ -23,7 +23,7 @@ COPY --from=builder /root/.local /root/.local
 COPY --from=builder /app/__pypackages__ /app/__pypackages__
 
 # Copy application files (now from root)
-COPY wsgi.py .env ./
+COPY app/main.py .env ./
 
 # Environment setup
 ENV PATH=/root/.local/bin:/app/__pypackages__/3.9/bin:$PATH
