@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.router.assessment_router import assessment_router
+from app.router.auth_router import router
 from app.router.dashboard_router import dashboard_router
 from app.router.job_router import job_router
 from app.router.training_router import training_router
@@ -36,3 +37,4 @@ app.include_router(dashboard_router, tags=["Dashboard"])
 app.include_router(job_router, tags=["Job"])
 app.include_router(training_router, tags=["Training"])
 app.include_router(user_router, tags=["User"])
+app.include_router(router, tags=["Auth"])

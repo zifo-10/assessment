@@ -1,10 +1,9 @@
 from bson import ObjectId
-from fastapi import HTTPException, APIRouter
+from fastapi import HTTPException, APIRouter, Depends
 
+from app.auth.dependencies import role_required
 from app.constant_manager import CollectionNames
 from app.container import mongo_client
-
-# from app.utils.utils import  generate_certificate
 
 job_router = APIRouter()
 
@@ -18,8 +17,30 @@ def get_levels(difficulty):
     return levels.get(difficulty)
 
 
+@job_router.get('')
+async def get_all_jobs(page: int = 1,
+                       limit: int = 10):
+    try:
+        skip = (page - 1) * limit
+        jobs_cursor = mongo_client.find(
+            collection_name=CollectionNames.job_collection,
+            query={},
+            skip=skip,
+            limit=limit
+        )
+        jobs = list(jobs_cursor)
+        for job in jobs:
+            job['_id'] = str(job['_id'])
+        return jobs
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @job_router.get("/job_trainings/{job_code}/{user_id}/{language}")
-async def get_job(job_code: int, user_id: str, language: str):
+async def get_job(job_code: int,
+                  user_id: str,
+                  language: str,
+                  current_user = Depends(role_required(["admin", "super_admin", "user"]))):
     try:
         job = mongo_client.find_one(
             CollectionNames.job_collection,
